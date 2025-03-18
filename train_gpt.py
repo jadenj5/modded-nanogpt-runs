@@ -186,6 +186,7 @@ class Muon(torch.optim.Optimizer):
                 if base_i + self.rank < len(params):
                     p = params[base_i + self.rank]
                     g = p.grad
+                    orig_sign = g.sign().detach()
                     assert g is not None
                     state = self.state[p]
                     if "momentum_buffer" not in state:
@@ -193,6 +194,14 @@ class Muon(torch.optim.Optimizer):
                     buf: Tensor = state["momentum_buffer"]
                     buf.lerp_(g, 1 - group["momentum"])
                     g = g.lerp_(buf, group["momentum"]) if group["nesterov"] else buf
+
+                    mask = (orig_sign == g.sign()).to(g.dtype)
+                    g.mul_(mask)
+                    dim_x = g.numel()
+                    nnz_x = torch.count_nonzero(g)
+                    scaling = dim_x / (nnz_x + 1)
+                    g.mul_(scaling)
+
                     g = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).flatten()
                 else:
                     g = update_buffer_views[self.rank]
@@ -332,7 +341,6 @@ class GPT(nn.Module):
         self.lm_head.weight.detach().zero_() # @Grad62304977
         # Add learnable skip connection weights for decoder layers
         assert num_layers % 2 == 0
-        self.skip_weights = nn.Parameter(torch.ones(num_layers//2))
 
     def create_blockmasks(self, input_seq: Tensor, sliding_window_num_blocks: Tensor):
         BLOCK_SIZE = 128
@@ -390,10 +398,10 @@ class GPT(nn.Module):
 
         # U-net design by @brendanh0gan
         skip_connections = []
-        n = len(self.skip_weights)
+        n = self.num_layers//2
         for i in range(len(self.blocks)):
             if i >= n:
-                x = x + self.skip_weights[i - n] * skip_connections.pop()
+                x = x + skip_connections.pop()
             x = self.blocks[i](x, ve[i], x0, block_masks[i])
             if i < n:
                 skip_connections.append(x)
