@@ -353,6 +353,7 @@ class GPT(nn.Module):
         self.lm_head.weight.detach().zero_() # @Grad62304977
         # Add learnable skip connection weights for decoder layers
         self.num_layers = num_layers
+        self.skip_weights = nn.Parameter(torch.ones(num_layers // 2))
         assert num_layers % 2 == 0
 
     def create_blockmasks(self, input_seq: Tensor, sliding_window_num_blocks: Tensor):
@@ -415,7 +416,7 @@ class GPT(nn.Module):
         n = self.num_layers // 2
         for i in range(len(self.blocks)):
             if i >= n:
-                x = x + skip_connections.pop()
+                x = x + self.skip_weights[i - n] * skip_connections.pop()
             x = self.blocks[i](x, ve[i], x0, block_masks[i])
             if i < n:
                 skip_connections.append(x)
@@ -466,7 +467,7 @@ class Hyperparameters:
     train_files = "data/fineweb10B/fineweb_train_*.bin" # input .bin to train on
     val_files = "data/fineweb10B/fineweb_val_*.bin" # input .bin to eval validation loss on
     val_tokens = 10485760 # how many tokens of validation data? it's important to keep this fixed for consistent comparisons
-    train_seq_len = 64*1024 # FlexAttention sequence length
+    train_seq_len = 48*1024 # FlexAttention sequence length
     val_seq_len = 4*64*1024 # FlexAttention sequence length for validation
     # optimization
     num_iterations = 1790 # number of iterations to run
