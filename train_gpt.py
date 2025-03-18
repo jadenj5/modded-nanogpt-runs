@@ -340,6 +340,7 @@ class GPT(nn.Module):
                                     use_fp8=True, x_s=(model_dim**0.5)/448, w_s=24/448, grad_s=1/448)
         self.lm_head.weight.detach().zero_() # @Grad62304977
         # Add learnable skip connection weights for decoder layers
+        self.num_layers = num_layers
         assert num_layers % 2 == 0
 
     def create_blockmasks(self, input_seq: Tensor, sliding_window_num_blocks: Tensor):
