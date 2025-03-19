@@ -191,7 +191,7 @@ class Muon(torch.optim.Optimizer):
                 if base_i + self.rank < len(params):
                     p = params[base_i + self.rank]
                     g = p.grad
-                    #orig_sign = g.sign().detach()
+                    orig_sign = g.sign().detach()
                     assert g is not None
                     state = self.state[p]
                     if "momentum_buffer" not in state:
@@ -200,13 +200,13 @@ class Muon(torch.optim.Optimizer):
                     buf.lerp_(g, 1 - group["momentum"])
                     g = g.lerp_(buf, group["momentum"]) if group["nesterov"] else buf
 
-                    #mask = (orig_sign == g.sign())
-                    #g.mul_(mask)
+                    mask = (orig_sign == g.sign())
+                    g.mul_(mask)
 
-                    #dim_x = g.numel()
-                    #nnz_x = torch.count_nonzero(g)
-                    #scaling = dim_x / (nnz_x + 1)
-                    #g.mul_(scaling)
+                    dim_x = g.numel()
+                    nnz_x = torch.count_nonzero(g)
+                    scaling = dim_x / (nnz_x + 1)
+                    g.mul_(scaling)
 
                     g = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).flatten()
                 else:
